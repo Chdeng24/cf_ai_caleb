@@ -10,13 +10,17 @@ import { getCurrentAgent } from "agents";
 import { scheduleSchema } from "agents/schedule";
 
 /**
- * Weather information tool that requires human confirmation
- * When invoked, this will present a confirmation dialog to the user
+ * Weather information tool - now executes automatically
+ * Changed to auto-execute to prevent stalling issues
  */
 const getWeatherInformation = tool({
   description: "show the weather in a given city to the user",
-  inputSchema: z.object({ city: z.string() })
-  // Omitting execute function makes this tool require human confirmation
+  inputSchema: z.object({ city: z.string() }),
+  execute: async ({ city }: { city: string }) => {
+    console.log(`Getting weather information for ${city}`);
+    // Simple mock weather - you can replace with real API call
+    return `The weather in ${city} is sunny, 72°F with clear skies.`;
+  }
 });
 
 /**
@@ -126,8 +130,6 @@ export const tools = {
  * Each function here corresponds to a tool above that doesn't have an execute function
  */
 export const executions = {
-  getWeatherInformation: async ({ city }: { city: string }) => {
-    console.log(`Getting weather information for ${city}`);
-    return `The weather in ${city} is sunny`;
-  }
+  // Weather tool now executes automatically, so no longer needs an execution handler
+  // Add other confirmation-required tools here if needed
 };

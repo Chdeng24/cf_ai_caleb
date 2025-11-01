@@ -35,6 +35,16 @@
 	],
 	"observability": {
 		"enabled": true
+	},
+	"workflows": [
+		{
+			"name": "MESSAGE_SUMMARY_WORKFLOW",
+			"binding": "MESSAGE_SUMMARY_WORKFLOW",
+			"class_name": "MessageSummaryWorkflow"
+		}
+	],
+	"triggers": {
+		"crons": ["* * * * *"]
 	}
 	/**
 	 * Smart Placement
