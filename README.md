@@ -8,18 +8,20 @@ A starter template for building AI-powered chat agents using Cloudflare's Agent 
 
 ## Features
 
-- 💬 Interactive chat interface with AI
+- 💬 Interactive chat interface with AI powered by **Workers AI** (Llama 3.3)
+- 🤖 **Automated Message Summarization** - AI-generated summaries every minute via Cloudflare Workflows
 - 🛠️ Built-in tool system with human-in-the-loop confirmation
 - 📅 Advanced task scheduling (one-time, delayed, and recurring via cron)
 - 🌓 Dark/Light theme support
 - ⚡️ Real-time streaming responses
-- 🔄 State management and chat history
+- 🔄 State management and chat history (Durable Objects)
 - 🎨 Modern, responsive UI
+- ⚙️ **Workflow Orchestration** - Multi-step automated tasks with retry logic
 
 ## Prerequisites
 
-- Cloudflare account
-- OpenAI API key
+- Cloudflare account (for Workers AI, Workflows, and Durable Objects)
+- No API keys required - uses Cloudflare Workers AI (no OpenAI needed)
 
 ## Quick Start
 
@@ -35,15 +37,7 @@ npx create-cloudflare@latest --template cloudflare/agents-starter
 npm install
 ```
 
-3. Set up your environment:
-
-Create a `.dev.vars` file:
-
-```env
-OPENAI_API_KEY=your_openai_api_key
-```
-
-4. Run locally:
+3. Run locally:
 
 ```bash
 npm start
@@ -60,11 +54,124 @@ npm run deploy
 ```
 ├── src/
 │   ├── app.tsx        # Chat UI implementation
-│   ├── server.ts      # Chat agent logic
-│   ├── tools.ts       # Tool definitions
+│   ├── server.ts      # Chat agent logic with summary endpoints
+│   ├── workflows.ts   # Automated message summarization workflow
+│   ├── tools.ts       # Tool definitions (weather, scheduling, etc.)
 │   ├── utils.ts       # Helper functions
 │   └── styles.css     # UI styling
+├── wrangler.jsonc     # Cloudflare configuration (Workflows, AI binding, cron)
+└── package.json       # Dependencies (workers-ai-provider, agents SDK)
 ```
+
+## 🤖 Automated Message Summarization
+
+This project includes an **automated message summarization feature** that demonstrates Cloudflare Workflows, Workers AI, and Durable Objects working together.
+
+### How It Works
+
+Every minute (in production), a Cloudflare Workflow:
+1. **Fetches messages** from the chat agent (Durable Object)
+2. **Generates a summary** using Workers AI (Llama 3.3)
+3. **Displays the summary** as a message in the chat UI
+4. **Stores summaries** in persistent state
+
+### Architecture
+
+- **Workflows** (`src/workflows.ts`): Orchestrates the multi-step summarization process
+- **Cron Trigger**: Runs every minute (`* * * * *` in `wrangler.jsonc`)
+- **Workers AI**: Uses `@cf/meta/llama-3.3-70b-instruct-fp8-fast` for summarization
+- **Durable Objects**: Stores chat history and summary state
+- **Automatic Retries**: Built-in retry logic for each workflow step
+
+### Testing the Automation
+
+#### Local Development
+
+Cron triggers don't fire automatically in `wrangler dev`. To test locally:
+
+1. **Start the development server:**
+   ```bash
+   npm start
+   # or
+   npx wrangler dev
+   ```
+
+2. **Have a conversation** - Send a few messages in the chat
+
+3. **Manually trigger a summary:**
+   ```bash
+   curl -X POST http://localhost:8787/api/trigger-summary
+   ```
+
+4. **Check the chat** - A summary message will appear within a few seconds:
+   ```
+   📋 **Conversation Summary**
+   
+   [AI-generated summary of your conversation]
+   
+   _Generated automatically_
+   ```
+
+#### Production Deployment
+
+After deployment, summaries are generated **automatically every minute**:
+
+```bash
+npm run deploy
+```
+
+Once deployed:
+- ✅ Cron trigger fires automatically every minute
+- ✅ Workflow generates summaries when messages exist
+- ✅ Summaries appear in chat automatically
+- ✅ No manual intervention needed
+
+### Workflow Steps
+
+The summarization workflow consists of 5 steps:
+
+1. **fetch-messages** - Retrieves chat history from Durable Object
+2. **format-messages** - Formats recent messages for AI processing
+3. **generate-summary** - Uses Workers AI to create a concise summary
+4. **save-and-display-summary** - Stores summary in state and displays in chat
+5. **completion** - Returns success status
+
+Each step includes:
+- Automatic retries with exponential backoff
+- Timeout protection
+- Error handling
+- Console logging for observability
+
+### Configuration
+
+The automation is configured in `wrangler.jsonc`:
+
+```jsonc
+{
+  "workflows": [
+    {
+      "name": "MESSAGE_SUMMARY_WORKFLOW",
+      "binding": "MESSAGE_SUMMARY_WORKFLOW",
+      "class_name": "MessageSummaryWorkflow"
+    }
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]  // Runs every minute
+  },
+  "ai": {
+    "binding": "AI",
+    "remote": true
+  }
+}
+```
+
+### Viewing Workflow Logs
+
+Check the Cloudflare dashboard or local console for workflow execution logs:
+- `[timestamp] Triggering message summary workflow...`
+- `Fetched X messages from agent: default`
+- `Generated summary: [preview]...`
+- `Summary saved and displayed successfully`
 
 ## Customization Guide
 
@@ -129,9 +236,28 @@ Tools can be configured in two ways:
 1. With an `execute` function for automatic execution
 2. Without an `execute` function, requiring confirmation and using the `executions` object to handle the confirmed action. NOTE: The keys in `executions` should match `toolsRequiringConfirmation` in `app.tsx`.
 
-### Use a different AI model provider
+### AI Model Provider
 
-The starting [`server.ts`](https://github.com/cloudflare/agents-starter/blob/main/src/server.ts) implementation uses the [`ai-sdk`](https://sdk.vercel.ai/docs/introduction) and the [OpenAI provider](https://sdk.vercel.ai/providers/ai-sdk-providers/openai), but you can use any AI model provider by:
+This project uses **Cloudflare Workers AI** with the Llama 3.3 model via the `workers-ai-provider`. This means:
+
+- ✅ **No API keys required** - Uses Cloudflare's Workers AI binding
+- ✅ **No external dependencies** - Everything runs on Cloudflare's edge
+- ✅ **Fast responses** - Optimized for edge computing
+- ✅ **Cost-effective** - No per-token charges
+
+The model used: `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
+
+You can switch to a different Workers AI model by changing the model identifier in `src/server.ts`:
+
+```typescript
+const model = workersai("@cf/meta/llama-3.1-8b-instruct" as any);
+```
+
+Available models: [Cloudflare Workers AI Models](https://developers.cloudflare.com/workers-ai/models/)
+
+### Using a different AI model provider
+
+If you want to use OpenAI, Anthropic, or another provider instead:
 
 1. Installing an alternative AI provider for the `ai-sdk`, such as the [`workers-ai-provider`](https://sdk.vercel.ai/providers/community-providers/cloudflare-workers-ai) or [`anthropic`](https://sdk.vercel.ai/providers/ai-sdk-providers/anthropic) provider:
 2. Replacing the AI SDK with the [OpenAI SDK](https://github.com/openai/openai-node)
@@ -227,11 +353,74 @@ Each use case can be implemented by:
 3. Extending the agent's capabilities in `server.ts`
 4. Adding any necessary external API integrations
 
+## Assignment Requirements ✅
+
+This project demonstrates all required components for an AI-powered Cloudflare application:
+
+- ✅ **LLM**: Uses Workers AI with Llama 3.3 (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`)
+- ✅ **Workflow/Coordination**: Cloudflare Workflows for automated message summarization
+- ✅ **User Input**: Interactive chat interface with real-time streaming
+- ✅ **Memory/State**: Durable Objects for persistent chat history and state management
+
+### Key Technologies
+
+- **Workers AI**: AI inference at the edge
+- **Workflows**: Durable, orchestrated multi-step automation
+- **Durable Objects**: Strongly consistent state and chat persistence
+- **Agents SDK**: Chat agent framework with built-in memory
+
+## Deployment
+
+### Quick Deploy
+
+```bash
+npm run deploy
+```
+
+This will:
+1. Build the project
+2. Deploy to Cloudflare Workers
+3. Enable cron triggers (summaries run automatically)
+4. Configure all bindings (AI, Workflows, Durable Objects)
+
+### Deployed Link
+
+After deployment, your app will be available at:
+```
+https://agents-starter.YOUR_SUBDOMAIN.workers.dev
+```
+
+The automation (summaries) will run automatically every minute once deployed.
+
+## Troubleshooting
+
+### Summaries not appearing locally?
+
+**Solution**: Cron triggers don't work in local dev. Use the manual trigger endpoint:
+```bash
+curl -X POST http://localhost:8787/api/trigger-summary
+```
+
+### Workflow errors?
+
+Check:
+1. Workers AI binding is configured in `wrangler.jsonc`
+2. Workflow class is properly exported in `src/workflows.ts`
+3. Durable Object migrations are applied
+4. Console logs for detailed error messages
+
+### No messages to summarize?
+
+The workflow only generates summaries when there are messages. Have a conversation first, then trigger a summary.
+
 ## Learn More
 
 - [`agents`](https://github.com/cloudflare/agents/blob/main/packages/agents/README.md)
 - [Cloudflare Agents Documentation](https://developers.cloudflare.com/agents/)
 - [Cloudflare Workers Documentation](https://developers.cloudflare.com/workers/)
+- [Cloudflare Workflows](https://developers.cloudflare.com/workflows/)
+- [Workers AI Models](https://developers.cloudflare.com/workers-ai/models/)
+- [Durable Objects](https://developers.cloudflare.com/durable-objects/)
 
 ## License
 

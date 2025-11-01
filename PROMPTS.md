@@ -164,4 +164,7 @@ Acceptance:
 
 #5 playing around with the chat, broke the weather? AI stalled when I asked for the weather, identify whats causing this, is it permissions or a dependency still on openAI?
 
-#6
+#6make a readme file with these specifications showing this automation:
+To be considered, your repository name must be prefixed with cf_ai_, must include a README.md file with project documentation and clear running instructions to try out components (either locally or via deployed link). 
+
+make in the active readme file. also explain why local run doesn't work but deployment does...
